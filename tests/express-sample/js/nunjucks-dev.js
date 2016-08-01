@@ -480,6 +480,7 @@ var Super = Node.extend("Super", { fields: ['blockName', 'symbol'] });
 var TemplateRef = Node.extend("TemplateRef", { fields: ['template'] });
 var Extends = TemplateRef.extend("Extends");
 var Include = TemplateRef.extend("Include");
+var Embed = TemplateRef.extend("Embed");
 var Set = Node.extend("Set", { fields: ['targets', 'value'] });
 var Output = NodeList.extend("Output");
 var TemplateData = Literal.extend("TemplateData");
@@ -640,6 +641,7 @@ modules['nodes'] = {
     Super: Super,
     Extends: Extends,
     Include: Include,
+    Embed: Embed,
     Set: Set,
     LookupVal: LookupVal,
     BinOp: BinOp,
@@ -1767,6 +1769,10 @@ var Parser = Object.extend({
         return this.parseTemplateRef('include', nodes.Include);
     },
 
+    parseEmbed: function() {
+        return this.parseTemplateRef('embed', nodes.Embed);
+    },
+
     parseIf: function() {
         var tag = this.peekToken();
         var node;
@@ -1864,6 +1870,7 @@ var Parser = Object.extend({
         case 'block': return this.parseBlock();
         case 'extends': return this.parseExtends();
         case 'include': return this.parseInclude();
+        case 'embed': return this.parseEmbed();
         case 'set': return this.parseSet();
         case 'macro': return this.parseMacro();
         case 'import': return this.parseImport();
@@ -3758,8 +3765,33 @@ var Compiler = Object.extend({
         this.addScopeLevel();
     },
 
+    compileEmbed: function(node, frame) {
+        var id = this.tmpid();
+        var id2 = this.tmpid();
+        var k = this.tmpid();
+
+        this.emit('env.getTemplate(');
+        this._compileExpression(node.template, frame);
+
+        this.emitLine(', true, ' + this._templateName() + ', ' + node.ignoreMissing + ', ' + this.makeCallback(id));
+
+        this.emitLine('for(var ' + k + ' in ' + id +'.blocks) {');
+        this.emitLine('context.addBlock(' + k +
+            ', ' + id + '.blocks[' + k + ']);');
+        this.emitLine('}');
+
+        this.addScopeLevel();
+
+        this.emitLine(id + '.render(' +
+            'context.getVariables(), frame, ' + this.makeCallback(id2));
+
+        this.emitLine(this.buffer + ' += ' + id2);
+        this.addScopeLevel();
+    },
+
     compileTemplateData: function(node, frame) {
         this.compileLiteral(node, frame);
+        this._compileExpression(node.template, frame);
     },
 
     compileOutput: function(node, frame) {
